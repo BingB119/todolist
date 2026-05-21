@@ -1,0 +1,15 @@
+{
+  "name": "todolist",
+  "version": "1.0.0",
+  "description": "A full-stack TodoList application built with Vue 3, Node.js, and MySQL.",
+  "main": "create-db-node.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "mysql2": "^3.22.3"
+  }
+}

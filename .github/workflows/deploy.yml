@@ -1,0 +1,27 @@
+name: 自动部署 TodoList 项目
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取仓库代码
+        uses: actions/checkout@v4
+
+      - name: 连接阿里云服务器并部署
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            mkdir -p /var/www/todolist
+            cd /var/www/todolist
+            unzip -o todolist.zip
+            npm install
+            npm run build
+            pm2 restart todolist || pm2 start index.js --name todolist

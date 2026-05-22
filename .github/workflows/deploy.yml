@@ -19,9 +19,22 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           script: |
+            # 1. 清空旧文件，创建目录
             mkdir -p /var/www/todolist
             cd /var/www/todolist
-            unzip -o todolist.zip
+            
+            # 2. 拉取最新代码（或者你也可以继续用 unzip 的方式）
+            git clone https://github.com/${{ github.repository }}.git temp_project
+            cp -r temp_project/* .
+            rm -rf temp_project
+            
+            # 3. 部署后端
+            cd /var/www/todolist/backend
+            npm install
+            pm2 restart todo-backend || pm2 start server.js --name todo-backend
+            
+            # 4. 部署前端
+            cd /var/www/todolist/frontend
             npm install
             npm run build
-            pm2 restart todolist || pm2 start index.js --name todolist
+            pm2 restart todo-frontend || pm2 serve dist 3000 --name todo-frontend

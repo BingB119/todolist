@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const path = require('path');
 const db = require('./db');
 
 const authRoutes = require('./routes/auth');
@@ -14,12 +15,23 @@ const port = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+// API 路由
 app.use('/api/auth', authRoutes);
 app.use('/api/todos', todoRoutes);
 
-app.get('/', (req, res) => {
-  res.json({ message: 'TodoList API 正在运行' });
-});
+// 生产环境：托管前端静态文件（Docker 镜像内由 frontend/dist 复制到 public/）
+if (process.env.NODE_ENV === 'production') {
+  const staticPath = path.join(__dirname, 'public');
+  app.use(express.static(staticPath));
+  // SPA 路由回退：所有非 API 请求返回 index.html
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(staticPath, 'index.html'));
+  });
+} else {
+  app.get('/', (req, res) => {
+    res.json({ message: 'TodoList API 正在运行' });
+  });
+}
 
 // 创建数据库表
 async function createTables() {

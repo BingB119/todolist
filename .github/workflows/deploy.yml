@@ -10,28 +10,21 @@ on:
   workflow_dispatch:   # 也支持手动触发
 
 # ============================================================
-# 环境变量（修改此处即可，无需动其他地方）
+# 环境变量
 # ============================================================
 env:
-  # Docker Hub 镜像名称（格式：用户名/仓库名）
   IMAGE_NAME: ${{ secrets.DOCKER_HUB_USERNAME }}/todolist
-  # 容器名称（ECS 上运行的容器叫这个名字）
   CONTAINER_NAME: todolist-app
-  # 应用运行端口
   APP_PORT: 3000
-  # MySQL 容器名称（ECS 上已有 MySQL 容器）
   MYSQL_CONTAINER: todolist-mysql
 
 jobs:
   # ============================================================
-  # Job 1：构建 Docker 镜像 并推送到 Docker Hub
+  # Job 1：构建镜像 → 推 Docker Hub（备份）→ 保存 tar.gz → 上传 Artifact
   # ============================================================
   build-and-push:
-    name: 🔨 Build & Push Image
+    name: 🔨 Build & Push & Save
     runs-on: ubuntu-latest
-
-    outputs:
-      image_tag: ${{ steps.meta.outputs.version }}
 
     steps:
       - name: 📥 Checkout 代码
@@ -55,78 +48,91 @@ jobs:
       - name: 🛠️ 设置 Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: 🐳 构建并推送镜像
+      - name: 🐳 构建并推送镜像（Docker Hub 备份）
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # 启用 GitHub Actions 缓存，加快二次构建速度
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: ✅ 输出镜像信息
+      - name: 💾 导出镜像为压缩包
         run: |
-          echo "镜像推送成功！"
-          echo "镜像标签: ${{ steps.meta.outputs.tags }}"
+          docker save ${{ env.IMAGE_NAME }}:latest | gzip > todolist-image.tar.gz
+          echo "📦 压缩包大小: $(du -h todolist-image.tar.gz | cut -f1)"
+
+      - name: 📤 上传镜像到 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: todolist-image
+          path: todolist-image.tar.gz
+          retention-days: 1
 
   # ============================================================
-  # Job 2：SSH 登录 ECS，拉取新镜像并重启容器
+  # Job 2：下载 Artifact → SCP 传镜像到 ECS → docker load → 运行
   # ============================================================
   deploy:
     name: 🚀 Deploy to ECS
     runs-on: ubuntu-latest
-    needs: build-and-push   # 依赖上一个 job 成功后才执行
+    needs: build-and-push
 
     steps:
-      - name: 🔗 SSH 部署到阿里云 ECS
+      - name: 📥 下载镜像 Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: todolist-image
+
+      - name: 📤 SCP 传输镜像到 ECS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.ALIYUN_ECS_IP }}
+          username: ${{ secrets.ALIYUN_ECS_USERNAME }}
+          key: ${{ secrets.ALIYUN_ECS_SSH_KEY }}
+          port: 22
+          source: todolist-image.tar.gz
+          target: /tmp/
+          timeout: 300s
+
+      - name: 🚀 加载镜像并启动容器
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.ALIYUN_ECS_IP }}
           username: ${{ secrets.ALIYUN_ECS_USERNAME }}
           key: ${{ secrets.ALIYUN_ECS_SSH_KEY }}
           port: 22
-          # SSH 连接超时时间
           timeout: 60s
-          # 命令执行超时时间
-          command_timeout: 10m
+          command_timeout: 5m
           script: |
-            set -e   # 任意一步失败立即退出
-
             echo "=========================================="
             echo "🚀 开始部署 TodoList 应用"
             echo "时间: $(date '+%Y-%m-%d %H:%M:%S')"
             echo "=========================================="
 
-            # ---------- 1. 登录 Docker Hub ----------
-            echo "${{ secrets.DOCKER_HUB_TOKEN }}" | \
-              docker login -u "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
-            echo "✅ Docker Hub 登录成功"
+            # ---------- 1. 加载镜像 ----------
+            echo "📥 加载 Docker 镜像..."
+            docker load < /tmp/todolist-image.tar.gz
+            echo "✅ 镜像加载完成"
 
-            # ---------- 2. 拉取最新镜像 ----------
-            echo "📥 拉取最新镜像..."
-            docker pull ${{ env.IMAGE_NAME }}:latest
-            echo "✅ 镜像拉取成功"
-
-            # ---------- 3. 确保 MySQL 容器在运行 ----------
+            # ---------- 2. 确保 MySQL 容器运行 ----------
             if ! docker ps --format '{{.Names}}' | grep -q "^${{ env.MYSQL_CONTAINER }}$"; then
               echo "⚠️  MySQL 容器未运行，尝试启动..."
-              docker start ${{ env.MYSQL_CONTAINER }} || \
-                echo "❌ MySQL 容器不存在，请先按文档手动初始化数据库！"
+              docker start ${{ env.MYSQL_CONTAINER }} 2>/dev/null || \
+                echo "❌ MySQL 容器不存在，跳过"
             else
               echo "✅ MySQL 容器运行中"
             fi
 
-            # ---------- 4. 停止并删除旧容器（如果存在）----------
+            # ---------- 3. 停止并删除旧容器 ----------
             if docker ps -a --format '{{.Names}}' | grep -q "^${{ env.CONTAINER_NAME }}$"; then
               echo "🛑 停止旧容器..."
-              docker stop ${{ env.CONTAINER_NAME }} || true
-              docker rm   ${{ env.CONTAINER_NAME }} || true
+              docker stop ${{ env.CONTAINER_NAME }} 2>/dev/null || true
+              docker rm ${{ env.CONTAINER_NAME }} 2>/dev/null || true
               echo "✅ 旧容器已清除"
             fi
 
-            # ---------- 5. 启动新容器 ----------
+            # ---------- 4. 启动新容器 ----------
             echo "▶️  启动新容器..."
             docker run -d \
               --name ${{ env.CONTAINER_NAME }} \
@@ -135,7 +141,7 @@ jobs:
               -p ${{ env.APP_PORT }}:3000 \
               -e NODE_ENV=production \
               -e PORT=3000 \
-              -e DB_HOST=todolist-mysql \
+              -e DB_HOST=${{ env.MYSQL_CONTAINER }} \
               -e DB_PORT=3306 \
               -e DB_USER=todouser \
               -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
@@ -145,7 +151,7 @@ jobs:
 
             echo "✅ 新容器启动成功"
 
-            # ---------- 6. 健康检查（等待服务就绪）----------
+            # ---------- 5. 健康检查 ----------
             echo "🔍 等待服务启动..."
             for i in $(seq 1 15); do
               if curl -sf http://localhost:${{ env.APP_PORT }}/ > /dev/null 2>&1; then
@@ -156,15 +162,17 @@ jobs:
               sleep 3
             done
 
-            # ---------- 7. 输出容器状态 ----------
+            # ---------- 6. 容器状态 ----------
             echo ""
             echo "=========================================="
             echo "📊 容器运行状态"
             echo "=========================================="
             docker ps --filter "name=${{ env.CONTAINER_NAME }}" \
-              --format "表格\t{{.Names}}\t{{.Status}}\t{{.Ports}}"
+              --format "{{.Names}} | {{.Status}} | {{.Ports}}"
 
-            # ---------- 8. 清理旧镜像已跳过（ECS 无法访问外部 registry）----------
+            # ---------- 7. 清理临时文件 ----------
+            rm -f /tmp/todolist-image.tar.gz
+            echo "🧹 临时文件已清理"
 
             echo ""
             echo "=========================================="

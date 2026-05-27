@@ -58,6 +58,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: 📥 拉取镜像到本地（buildx 构建的镜像不在本地 docker 中）
+        run: |
+          docker pull ${{ env.IMAGE_NAME }}:latest
+          echo "✅ 镜像已加载到本地 Docker"
+
       - name: 💾 导出镜像为压缩包
         run: |
           docker save ${{ env.IMAGE_NAME }}:latest | gzip > todolist-image.tar.gz

@@ -7,7 +7,7 @@ echo ========================================
 echo.
 
 :: ---- 配置区：只需修改下面这两行 ----
-set GITHUB_USERNAME=你的GitHub用户名
+set GITHUB_USERNAME=BingB119
 set GITHUB_REPO=todolist
 :: ------------------------------------
 

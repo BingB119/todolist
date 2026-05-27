@@ -48,36 +48,39 @@ router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
 
+    // 参数验证
     if (!username || !password) {
-      return res.status(400).json({ error: '用户名和密码为必填项' });
+      return res.status(400).json({ error: '用户名和密码必填' });
     }
 
-    const [users] = await db.execute(
-      'SELECT id, username, password FROM users WHERE username = ?',
+    // 数据库查询
+    const [rows] = await db.execute(
+      'SELECT id, password FROM users WHERE username = ? LIMIT 1',
       [username]
     );
 
-    if (users.length === 0) {
-      return res.status(401).json({ error: '用户名或密码错误' });
+    if (!rows.length) {
+      return res.status(401).json({ error: '用户不存在' });
     }
 
-    const user = users[0];
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-
-    if (!isPasswordValid) {
-      return res.status(401).json({ error: '用户名或密码错误' });
+    // 密码比对
+    const user = rows[0];
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: '密码错误' });
     }
 
+    // 生成Token
     const token = jwt.sign(
       { userId: user.id, username: user.username },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
-    res.json({ token, userId: user.id, username: user.username });
-  } catch (error) {
-    console.error('登录错误:', error);
-    res.status(500).json({ error: '服务器错误' });
+    res.json({ token });
+  } catch (err) {
+    console.error('登录错误:', err);
+    res.status(500).json({ error: '服务器内部错误' });
   }
 });
 

@@ -1,16 +1,12 @@
 const express = require('express');
 const db = require('../db');
-const authenticateToken = require('../middleware/auth');
 
 const router = express.Router();
-
-router.use(authenticateToken);
 
 router.get('/', async (req, res) => {
   try {
     const [todos] = await db.execute(
-      'SELECT * FROM todos WHERE user_id = ? ORDER BY created_at DESC',
-      [req.user.userId]
+      'SELECT * FROM todos ORDER BY created_at DESC'
     );
     res.json(todos);
   } catch (error) {
@@ -28,8 +24,8 @@ router.post('/', async (req, res) => {
     }
 
     const [result] = await db.execute(
-      'INSERT INTO todos (user_id, title, description) VALUES (?, ?, ?)',
-      [req.user.userId, title, description || '']
+      'INSERT INTO todos (user_id, title, description) VALUES (0, ?, ?)',
+      [title, description || '']
     );
 
     const [newTodo] = await db.execute(
@@ -50,8 +46,8 @@ router.put('/:id', async (req, res) => {
     const todoId = parseInt(req.params.id);
 
     const [existingTodos] = await db.execute(
-      'SELECT id FROM todos WHERE id = ? AND user_id = ?',
-      [todoId, req.user.userId]
+      'SELECT id FROM todos WHERE id = ?',
+      [todoId]
     );
 
     if (existingTodos.length === 0) {
@@ -76,10 +72,10 @@ router.put('/:id', async (req, res) => {
       values.push(completed);
     }
 
-    values.push(todoId, req.user.userId);
+    values.push(todoId);
 
     const [result] = await db.execute(
-      `UPDATE todos SET ${updateFields.join(', ')} WHERE id = ? AND user_id = ?`,
+      `UPDATE todos SET ${updateFields.join(', ')} WHERE id = ?`,
       values
     );
 
@@ -104,8 +100,8 @@ router.delete('/:id', async (req, res) => {
     const todoId = parseInt(req.params.id);
 
     const [result] = await db.execute(
-      'DELETE FROM todos WHERE id = ? AND user_id = ?',
-      [todoId, req.user.userId]
+      'DELETE FROM todos WHERE id = ?',
+      [todoId]
     );
 
     if (result.affectedRows === 0) {

@@ -7,37 +7,19 @@
       <form @submit.prevent="handleLogin" class="auth-form">
         <div class="form-group">
           <label for="username">用户名</label>
-          <input
-            id="username"
-            v-model="username"
-            type="text"
-            required
-            placeholder="请输入用户名"
-            class="form-input"
-          />
+          <input id="username" v-model="username" type="text" required placeholder="请输入用户名" class="form-input" />
         </div>
 
         <div class="form-group">
           <label for="password">密码</label>
-          <input
-            id="password"
-            v-model="password"
-            type="password"
-            required
-            placeholder="请输入密码"
-            class="form-input"
-          />
+          <input id="password" v-model="password" type="password" required placeholder="请输入密码" class="form-input" />
         </div>
 
         <div v-if="error" class="error-message">
           {{ error }}
         </div>
 
-        <button
-          type="submit"
-          :disabled="loading"
-          class="auth-button"
-        >
+        <button type="submit" :disabled="loading" class="auth-button">
           {{ loading ? '登录中...' : '登录' }}
         </button>
       </form>
@@ -49,9 +31,10 @@
   </div>
 </template>
 
+
 <script setup>
 import { ref } from 'vue';
-import { useAuthStore } from '../stores/auth';
+import axios from 'axios'; // 添加这行
 import { useRouter } from 'vue-router';
 
 const username = ref('');
@@ -59,7 +42,6 @@ const password = ref('');
 const loading = ref(false);
 const error = ref('');
 
-const authStore = useAuthStore();
 const router = useRouter();
 
 const handleLogin = async () => {
@@ -68,18 +50,21 @@ const handleLogin = async () => {
     return;
   }
 
-  loading.value = true;
-  error.value = '';
+  try {
+    loading.value = true;
+    const response = await axios.post('/api/auth/login', {
+      username: username.value,
+      password: password.value
+    });
 
-  const result = await authStore.login(username.value, password.value);
-
-  if (result.success) {
+    localStorage.setItem('token', response.data.token);
     router.push('/');
-  } else {
-    error.value = result.error;
+  } catch (err) {
+    error.value = err.response?.data?.error || '登录失败';
+    console.error('登录错误:', err);
+  } finally {
+    loading.value = false;
   }
-
-  loading.value = false;
 };
 </script>
 

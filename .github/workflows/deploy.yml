@@ -165,9 +165,8 @@ jobs:
               --format "表格\t{{.Names}}\t{{.Status}}\t{{.Ports}}"
 
             # ---------- 8. 清理旧镜像（节省磁盘）----------
-            echo "🧹 清理悬空镜像..."
-            docker image prune -f
-            echo "✅ 清理完成"
+            echo "🧹 清理悬空镜像（失败不影响部署）..."
+            docker image prune -f || echo "⚠️ 镜像清理跳过（ECS 无法访问外部 registry）"
 
             echo ""
             echo "=========================================="

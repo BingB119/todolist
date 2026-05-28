@@ -158,7 +158,7 @@ jobs:
 
             # ---------- 5. 健康检查 ----------
             echo "🔍 等待服务启动..."
-            for i in $(seq 1 15); do
+            for i in $(seq 1 20); do
               if curl -sf http://localhost:${{ env.APP_PORT }}/ > /dev/null 2>&1; then
                 echo "✅ 服务已就绪（第 ${i} 次检查通过）"
                 break
@@ -167,13 +167,19 @@ jobs:
               sleep 3
             done
 
-            # ---------- 6. 容器状态 ----------
+            # ---------- 6. 容器状态 + 日志（关键：方便排查） ----------
             echo ""
             echo "=========================================="
             echo "📊 容器运行状态"
             echo "=========================================="
-            docker ps --filter "name=${{ env.CONTAINER_NAME }}" \
+            docker ps -a --filter "name=${{ env.CONTAINER_NAME }}" \
               --format "{{.Names}} | {{.Status}} | {{.Ports}}"
+
+            echo ""
+            echo "=========================================="
+            echo "📋 应用启动日志（最近50行）"
+            echo "=========================================="
+            docker logs ${{ env.CONTAINER_NAME }} --tail 50 2>&1
 
             # ---------- 7. 清理临时文件 ----------
             rm -f /tmp/todolist-image.tar.gz

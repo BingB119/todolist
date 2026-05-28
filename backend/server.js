@@ -34,6 +34,22 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
+// 等待 MySQL 连接（带重试）
+async function waitForDB(maxRetries = 30, delayMs = 3000) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      await db.execute('SELECT 1');
+      console.log('✅ MySQL 连接成功');
+      return true;
+    } catch (err) {
+      console.log(`⏳ 等待 MySQL... (${i + 1}/${maxRetries})`);
+      await new Promise(r => setTimeout(r, delayMs));
+    }
+  }
+  console.warn('⚠️  MySQL 等待超时，继续启动（数据库可能不可用）');
+  return false;
+}
+
 // 创建数据库表
 async function createTables() {
   try {
@@ -59,16 +75,21 @@ async function createTables() {
       )
     `);
 
-    console.log('数据表创建成功');
+    console.log('✅ 数据表创建成功');
   } catch (error) {
-    console.error('创建数据表时出错:', error);
+    console.error('创建数据表时出错:', error.message);
   }
 }
 
-app.listen(port, () => {
-  console.log(`服务器正在端口 ${port} 上运行`);
-  createTables();
-});
+// 先等 MySQL，再启动服务器
+(async () => {
+  await waitForDB();
+  await createTables();
+
+  app.listen(port, () => {
+    console.log(`🚀 服务器正在端口 ${port} 上运行`);
+  });
+})();
 
 // 防止未捕获异常导致进程崩溃
 process.on('uncaughtException', (err) => {

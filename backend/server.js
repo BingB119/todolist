@@ -70,4 +70,12 @@ app.listen(port, () => {
   createTables();
 });
 
+// 防止未捕获异常导致进程崩溃
+process.on('uncaughtException', (err) => {
+  console.error('未捕获异常:', err.message);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('未处理的 Promise 拒绝:', reason);
+});
+
 module.exports = app;

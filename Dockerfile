@@ -39,10 +39,14 @@ COPY --from=frontend-builder /app/frontend/dist ./public
 # ---- 让后端托管前端静态文件 ----
 # server.js 启动时会自动 serve public/ 目录（见下方注释说明）
 
+# ---- 复制启动脚本 ----
+COPY entrypoint.sh ./
+RUN chmod +x entrypoint.sh
+
 EXPOSE 3000
 
 # 健康检查（用 node 原生发请求，不依赖外部工具）
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=50s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/',r=>{process.exit(r.statusCode<500?0:1)}).on('error',()=>process.exit(1))"
 
-CMD ["node", "server.js"]
+ENTRYPOINT ["/app/entrypoint.sh"]
